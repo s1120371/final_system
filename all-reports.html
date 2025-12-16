@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>所有通報｜路見不平通報系統</title>
+
+<style>
+:root {
+  --primary-color:#3F72AF;
+  --secondary-color:#6c757d;
+  --background-color:#f8f9fa;
+  --card-background:#ffffff;
+  --text-color:#343a40;
+  --border-color:#dee2e6;
+  --font-sans:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;
+
+  --status-submitted-text:#6c757d;
+  --status-submitted-bg:#f8f9fa;
+  --status-assigned-text:var(--primary-color);
+  --status-assigned-bg:#e9f2ff;
+  --status-processing-text:#d49832;
+  --status-processing-bg:#fff8e8;
+  --status-completed-text:white;
+  --status-completed-bg:#28a745;
+
+  --severity-urgent-bg:#dc3545;
+  --severity-urgent-text:white;
+  --severity-normal-bg:#f8f9fa;
+  --severity-normal-text:var(--primary-color);
+}
+
+body{
+  font-family:var(--font-sans);
+  max-width:1000px;
+  margin:30px auto;
+  padding:0 20px;
+  background:var(--background-color);
+  color:var(--text-color);
+}
+
+header{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  border-bottom:3px solid var(--primary-color);
+  padding-bottom:10px;
+}
+
+h2{margin:0;color:var(--primary-color)}
+
+header button{
+  background:var(--secondary-color);
+  color:white;
+  border:none;
+  padding:10px 18px;
+  border-radius:5px;
+  cursor:pointer;
+}
+
+.card{
+  background:var(--card-background);
+  border:1px solid var(--border-color);
+  border-radius:8px;
+  padding:15px;
+  margin-top:20px;
+  transition:.2s;
+}
+.card:hover{
+  box-shadow:0 6px 15px rgba(0,0,0,.1);
+  transform:translateY(-2px);
+}
+
+.report{display:flex;gap:20px;cursor:pointer}
+.report img{
+  width:160px;
+  height:110px;
+  object-fit:cover;
+  border-radius:6px;
+}
+
+.tags{display:flex;gap:10px;margin-top:6px}
+.tag{
+  padding:5px 10px;
+  font-size:.85rem;
+  font-weight:bold;
+  border-radius:4px;
+  border:1px solid transparent;
+}
+
+.status.submitted{background:var(--status-submitted-bg);color:var(--status-submitted-text);border-color:#adb5bd}
+.status.assigned{background:var(--status-assigned-bg);color:var(--status-assigned-text);border-color:var(--primary-color)}
+.status.processing{background:var(--status-processing-bg);color:var(--status-processing-text);border-color:#ffc107}
+.status.completed{background:var(--status-completed-bg);color:var(--status-completed-text)}
+
+.severity.urgent{background:var(--severity-urgent-bg);color:var(--severity-urgent-text)}
+.severity.normal{background:var(--severity-normal-bg);color:var(--severity-normal-text);border-color:var(--primary-color)}
+
+small{color:#999}
+
+/* ===== 篩選卡片 ===== */
+.filter-card{
+  margin-top:20px;
+  padding:18px 20px;
+}
+
+.filter-header{
+  font-weight:bold;
+  color:var(--primary-color);
+  margin-bottom:10px;
+}
+
+.filter-row{
+  display:flex;
+  gap:20px;
+  flex-wrap:wrap;
+}
+
+.filter-item{
+  display:flex;
+  flex-direction:column;
+  min-width:180px;
+}
+
+.filter-item label{
+  font-size:.9rem;
+  font-weight:bold;
+  margin-bottom:4px;
+}
+
+.filter-item select{
+  padding:10px;
+  border-radius:6px;
+  border:1px solid var(--border-color);
+}
+#clearFilterBtn{
+  padding:10px 14px;
+  border-radius:6px;
+  border:1px solid var(--border-color);
+  background:#e9ecef;
+  font-weight:bold;
+  cursor:pointer;
+  transition:.2s;
+}
+#clearFilterBtn:hover{
+  background:var(--primary-color);
+  color:white;
+  border-color:var(--primary-color);
+}
+
+</style>
+</head>
+
+<body>
+
+<header>
+  <h2>所有通報</h2>
+  <button onclick="history.back()">返回</button>
+</header>
+
+<!-- 🔍 篩選 -->
+<div class="card filter-card">
+  <div class="filter-row">
+
+    <div class="filter-item">
+      <label>案件狀態</label>
+      <select id="statusFilter">
+        <option value="all">全部</option>
+        <option value="submitted">已送出</option>
+        <option value="assigned">已指派</option>
+        <option value="processing">處理中</option>
+        <option value="completed">已修復</option>
+      </select>
+    </div>
+
+    <div class="filter-item">
+      <label>嚴重程度</label>
+      <select id="severityFilter">
+        <option value="all">全部</option>
+        <option value="urgent">緊急</option>
+        <option value="normal">一般</option>
+      </select>
+    </div>
+<div class="filter-item" style="justify-content:flex-end;">
+  <label>&nbsp;</label>
+  <button id="clearFilterBtn" type="button">
+    清除篩選
+  </button>
+  </div>
+  
+</div>
+</div>
+
+<div id="list"></div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
+import { getAuth,onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js";
+import { getFirestore,collection,query,orderBy,getDocs } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
+
+const app=initializeApp({
+  apiKey:"AIzaSyDQziEhhw0dPu_io9sfWT-a3sADgIKFSd4",
+  authDomain:"system-b4d2d.firebaseapp.com",
+  projectId:"system-b4d2d"
+});
+const auth=getAuth(app);
+const db=getFirestore(app);
+
+const list=document.getElementById("list");
+const statusFilter=document.getElementById("statusFilter");
+const severityFilter=document.getElementById("severityFilter");
+
+let allReports=[];
+
+/* 載入 */
+async function loadReports(){
+  const snap=await getDocs(query(collection(db,"reports"),orderBy("createdAt","desc")));
+  allReports=snap.docs.map(d=>({id:d.id,...d.data()}));
+  applyFilters();
+}
+const clearBtn = document.getElementById("clearFilterBtn");
+
+clearBtn.onclick = () => {
+  statusFilter.value = "all";
+  severityFilter.value = "all";
+  applyFilters();
+};
+/* 核心篩選 */
+function applyFilters(){
+  const s=statusFilter.value;
+  const sev=severityFilter.value;
+
+  const filtered=allReports.filter(r=>{
+    const okStatus = s==="all"||r.status===s;
+    const okSev = sev==="all"||r.severity===sev;
+    return okStatus&&okSev;
+  });
+
+  renderList(filtered);
+}
+
+/* Render */
+function renderList(reports){
+  list.innerHTML="";
+  if(!reports.length){
+    list.innerHTML=`<div class="card"><p style="text-align:center;color:#6c757d;">無符合通報</p></div>`;
+    return;
+  }
+
+  reports.forEach(r=>{
+    const div=document.createElement("div");
+    div.className="card report";
+    div.onclick=()=>location.href=`report-detail.html?id=${r.id}`;
+
+    div.innerHTML=`
+      <img src="${r.imageUrl}">
+      <div>
+        <h3>${r.title}</h3>
+        <div class="tags">
+          <span class="tag severity ${r.severity}">
+            ${r.severity==="urgent"?"緊急":"一般"}
+          </span>
+          <span class="tag status ${r.status}">
+            ${statusText(r.status)}
+          </span>
+        </div>
+        <small>通報時間：${r.createdAt?.toDate().toLocaleString("zh-TW")||""}</small>
+      </div>
+    `;
+    list.appendChild(div);
+  });
+}
+
+function statusText(s){
+  return s==="submitted"?"已送出"
+    : s==="assigned"?"已指派"
+    : s==="processing"?"處理中"
+    : "已修復";
+}
+
+statusFilter.onchange=severityFilter.onchange=applyFilters;
+
+onAuthStateChanged(auth,u=>u&&loadReports());
+function sortSubmittedUrgentFirst(reports){
+  return [...reports].sort((a,b)=>{
+    if(a.status==="submitted" && b.status==="submitted"){
+      if(a.severity==="urgent" && b.severity!=="urgent") return -1;
+      if(a.severity!=="urgent" && b.severity==="urgent") return 1;
+    }
+    return 0;
+  });
+}
+</script>
+
+</body>
+</html>

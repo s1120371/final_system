@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>政府人員後台｜案件管理</title>
+
+<style>
+:root{
+  --primary:#3F72AF;
+  --bg:#f8f9fa;
+  --card:#fff;
+  --border:#dee2e6;
+  --text:#343a40;
+}
+body{
+  font-family:'Segoe UI',sans-serif;
+  max-width:1100px;
+  margin:30px auto;
+  padding:0 20px;
+  background:var(--bg);
+  color:var(--text);
+}
+header{
+  display:flex;
+  justify-content:space-between;
+  border-bottom:3px solid var(--primary);
+  padding-bottom:10px;
+}
+h2{margin:0;color:var(--primary)}
+button{
+  padding:10px 18px;
+  border:1px solid var(--border);
+  background:#e9ecef;
+  border-radius:5px;
+  cursor:pointer;
+}
+button:hover{background:var(--primary);color:#fff}
+
+.card{
+  background:var(--card);
+  border:1px solid var(--border);
+  border-radius:8px;
+  padding:25px;
+  margin-top:25px;
+}
+
+#map{height:300px;border-radius:6px;border:1px solid var(--border)}
+
+.map-legend{
+  display:flex;
+  justify-content:center;
+  gap:18px;
+  margin-top:10px;
+  flex-wrap:wrap;
+}
+.legend-item{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  cursor:pointer;
+  opacity:.5;
+  padding:4px 8px;
+  border-radius:4px;
+}
+.legend-item.active{
+  opacity:1;
+  font-weight:bold;
+  background:#e9f0ff;
+  color:var(--primary);
+}
+.legend-item img{width:18px}
+
+select{padding:8px;border-radius:5px}
+
+table{
+  width:100%;
+  border-collapse:collapse;
+  margin-top:15px;
+}
+th,td{
+  border:1px solid var(--border);
+  padding:10px;
+  text-align:center;
+}
+th{background:#f5f8fc;color:var(--primary)}
+.urgent{color:#e74c3c;font-weight:bold}
+</style>
+</head>
+
+<body>
+
+<header>
+  <h2>政府案件管理後台</h2>
+  <button id="logoutBtn">登出</button>
+</header>
+
+<div class="card">
+  <p><strong>👤 登入者：</strong><span id="userEmail">載入中...</span></p>
+  <p><strong>🌟 身分：</strong>政府人員</p>
+</div>
+
+<!-- ===== 地圖 ===== -->
+<div class="card">
+  <h3>案件地圖</h3>
+  <div id="map"></div>
+<div id="statusSummary" style="
+  text-align:center;
+  margin-top:10px;
+  font-size:14px;
+  color:#343a40;
+  font-weight:bold;
+">
+  載入中...
+</div>
+  <div class="map-legend">
+    <span class="legend-item active" data-status="all">📍 全部</span>
+    <span class="legend-item" data-status="submitted">
+      <img src="http://maps.google.com/mapfiles/ms/icons/red-dot.png"> 尚未處理
+    </span>
+    <span class="legend-item" data-status="assigned">
+      <img src="http://maps.google.com/mapfiles/ms/icons/orange-dot.png"> 已指派
+    </span>
+    <span class="legend-item" data-status="processing">
+      <img src="http://maps.google.com/mapfiles/ms/icons/yellow-dot.png"> 處理中
+    </span>
+    <span class="legend-item" data-status="completed">
+      <img src="http://maps.google.com/mapfiles/ms/icons/green-dot.png"> 已完成
+    </span>
+  </div>
+</div>
+
+<!-- ===== 清單 ===== -->
+<div class="card">
+  <h3>案件清單</h3>
+
+  <label>篩選狀態：</label>
+  <select id="statusFilter">
+    <option value="all">全部</option>
+    <option value="submitted">尚未處理</option>
+    <option value="assigned">已指派</option>
+    <option value="processing">處理中</option>
+    <option value="completed">已完成</option>
+  </select>
+
+  <table>
+    <thead>
+      <tr>
+        <th>標題</th>
+        <th>嚴重程度</th>
+        <th>狀態</th>
+        <th>建立時間</th>
+        <th>操作</th>
+      </tr>
+    </thead>
+    <tbody id="reportTable"></tbody>
+  </table>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
+import { getAuth,onAuthStateChanged,signOut } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js";
+import { getFirestore,collection,getDocs } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
+
+/* Firebase */
+const app=initializeApp({
+  apiKey:"AIzaSyDQziEhhw0dPu_io9sfWT-a3sADgIKFSd4",
+  authDomain:"system-b4d2d.firebaseapp.com",
+  projectId:"system-b4d2d"
+});
+const auth=getAuth(app);
+const db=getFirestore(app);
+function sortSubmittedBySeverity(reports){
+  const order = { urgent: 0, normal: 1 };
+
+  return [...reports].sort((a, b) => {
+    return (order[a.severity] ?? 99) - (order[b.severity] ?? 99);
+  });
+}
+/* DOM */
+const tableBody=document.getElementById("reportTable");
+const statusFilter=document.getElementById("statusFilter");
+const legends=document.querySelectorAll(".legend-item");
+
+let allReports=[],map,markers=[];
+
+/* Auth */
+onAuthStateChanged(auth,async user=>{
+  if(!user) return;
+  userEmail.innerText=user.email;
+  const snap=await getDocs(collection(db,"reports"));
+  allReports=snap.docs.map(d=>({id:d.id,...d.data()}));
+  updateStatusSummary(allReports);
+  initMap();
+  syncUI("all");
+});
+
+logoutBtn.onclick=async()=>{await signOut(auth);location.href="auth.html"};
+function updateStatusSummary(reports){
+  const count = {
+    submitted: 0,
+    assigned: 0,
+    processing: 0,
+    completed: 0
+  };
+
+  reports.forEach(r=>{
+    if(count[r.status] !== undefined){
+      count[r.status]++;
+    }
+  });
+
+  const total =
+    count.submitted +
+    count.assigned +
+    count.processing +
+    count.completed;
+
+  document.getElementById("statusSummary").innerText =
+    `尚未處理：${count.submitted} ｜ ` +
+    `已指派：${count.assigned} ｜ ` +
+    `處理中：${count.processing} ｜ ` +
+    `已完成：${count.completed} ｜ ` +
+    `共 ${total} 件`;
+}
+/* Map */
+function initMap(){
+  const valid = allReports.filter(r=>r.latitude && r.longitude);
+
+  map = new google.maps.Map(document.getElementById("map"),{
+    center: valid.length
+      ? { lat:+valid[0].latitude, lng:+valid[0].longitude }
+      : { lat:25.0478, lng:121.5170 },
+    zoom:12
+  });
+
+  markers = valid.map(r=>{
+    const icon =
+      r.status==="submitted"?"red"
+      : r.status==="assigned"?"orange"
+      : r.status==="processing"?"yellow"
+      : "green";
+
+    const m = new google.maps.Marker({
+      map,
+      position:{ lat:+r.latitude, lng:+r.longitude },
+      icon:`http://maps.google.com/mapfiles/ms/icons/${icon}-dot.png`,
+      title:r.title
+    });
+
+    m.__status = r.status;
+
+    /* ⭐ 點擊 marker → 跳案件詳情 */
+    m.addListener("click",()=>{
+      location.href = `report-detail.html?id=${r.id}`;
+    });
+
+    return m;
+  });
+}
+function renderTable(reports){
+  tableBody.innerHTML = "";
+
+  if (!reports.length) {
+    tableBody.innerHTML =
+      `<tr><td colspan="5" style="text-align:center;color:#6c757d;">無符合案件</td></tr>`;
+    return;
+  }
+
+  reports.forEach(r=>{
+    tableBody.innerHTML += `
+      <tr>
+        <td>${r.title}</td>
+        <td class="${r.severity==="urgent"?"urgent":""}">
+          ${r.severity==="urgent"?"緊急":"一般"}
+        </td>
+        <td>${statusText(r.status)}</td>
+        <td>${r.createdAt?.toDate().toLocaleString("zh-TW") || ""}</td>
+        <td>
+          <a href="report-detail.html?id=${r.id}">查看</a>
+        </td>
+      </tr>
+    `;
+  });
+}
+
+/* 核心篩選 */
+function applyFilter(status){
+  let list =
+    status === "all"
+      ? allReports
+      : allReports.filter(r => r.status === status);
+
+  /* ⭐ 只針對「尚未處理」做緊急 → 一般排序 */
+  if (status === "submitted") {
+    list = sortSubmittedBySeverity(list);
+  }
+
+  renderTable(list);
+
+  markers.forEach(m=>{
+    m.setVisible(status === "all" || m.__status === status);
+  });
+}
+
+
+/* ⭐ 同步 UI（唯一入口） */
+function syncUI(status){
+  statusFilter.value=status;
+
+  legends.forEach(l=>{
+    l.classList.toggle("active",l.dataset.status===status);
+  });
+
+  applyFilter(status);
+}
+
+/* 下拉 */
+statusFilter.onchange=()=>{
+  syncUI(statusFilter.value);
+};
+
+/* 圖例 */
+legends.forEach(l=>{
+  l.onclick=()=>syncUI(l.dataset.status);
+});
+
+/* 狀態文字 */
+function statusText(s){
+  return s==="submitted"?"尚未處理"
+       : s==="assigned"?"已指派"
+       : s==="processing"?"處理中"
+       : "已完成";
+}
+</script>
+
+<script
+  src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDWncU5_3lao2CkDNUWf9llEMDywLUBmTs"
+  async defer>
+</script>
+
+</body>
+</html>

@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>新增通報｜路見不平通報系統</title>
+
+<style>
+:root {
+  --primary-color: #3F72AF;
+  --primary-color-dark: #356295;
+  --submit-color: #28a745;
+  --submit-color-dark: #218838;
+  --secondary-color: #6c757d;
+  --background-color: #f8f9fa;
+  --card-background: #ffffff;
+  --text-color: #343a40;
+  --border-color: #dee2e6;
+  --font-sans: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+/* ===== 基本結構 ===== */
+* {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: var(--font-sans);
+  max-width: 760px;
+  margin: 30px auto;
+  padding: 0 20px;
+  background-color: var(--background-color);
+  color: var(--text-color);
+}
+
+form {
+  width: 100%;
+}
+
+/* ===== Header ===== */
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 30px;
+  padding-bottom: 10px;
+  border-bottom: 3px solid var(--primary-color);
+}
+
+h2 {
+  font-size: 1.8rem;
+  color: var(--primary-color);
+  margin: 0;
+}
+
+#backBtn {
+  background-color: var(--secondary-color);
+  color: white;
+  border: none;
+  padding: 10px 18px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+/* ===== 卡片 ===== */
+.card {
+  background: var(--card-background);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 25px;
+  margin-top: 20px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+}
+
+.card > *:not(:last-child) {
+  margin-bottom: 12px;
+}
+
+.card h3 {
+  margin: 0;
+  color: var(--primary-color);
+}
+
+/* ===== 表單元件 ===== */
+label {
+  font-weight: bold;
+}
+
+input[type="text"],
+textarea,
+input[type="file"] {
+  width: 100%;
+  padding: 12px 15px;
+  border: 1px solid var(--border-color);
+  border-radius: 5px;
+  font-size: 1rem;
+}
+
+textarea {
+  resize: vertical;
+  height: 120px;
+}
+
+/* ===== GPS 區塊 ===== */
+.location-group {
+  border: 1px dashed var(--border-color);
+  background-color: #fcfcfc;
+}
+
+.gps-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.row {
+  display: flex;
+  gap: 10px;
+}
+
+.row input {
+  flex: 1;
+}
+
+/* ===== GPS 按鈕 ===== */
+#gpsBtn {
+  border: 1px solid var(--border-color);
+  border-radius: 5px;
+  background-color: #ffc107;
+  padding: 10px 15px;
+  cursor: pointer;
+  width: fit-content;
+}
+
+/* ===== 嚴重程度 ===== */
+.severity-buttons {
+  display: flex;
+  gap: 15px;
+}
+
+.severity-btn {
+  flex: 1;
+  padding: 12px;
+  border: 2px solid var(--border-color);
+  background: #f1f1f1;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.severity-btn.active {
+  border-color: var(--primary-color);
+  background: #e9f2ff;
+  color: var(--primary-color);
+  font-weight: bold;
+}
+
+.severity-btn.urgent.active {
+  background: #ffe5e5;
+  border-color: #e74c3c;
+  color: #e74c3c;
+}
+
+/* ===== 送出 ===== */
+#submitBtn {
+  background-color: var(--submit-color);
+  color: white;
+  padding: 15px;
+  border: none;
+  border-radius: 5px;
+  font-weight: bold;
+  cursor: pointer;
+}
+</style>
+</head>
+
+<body>
+
+<header>
+  <h2>新增通報</h2>
+  <button id="backBtn">首頁</button>
+</header>
+
+<form>
+  <div class="card">
+    <h3>問題資訊</h3>
+
+    <label>通報標題 *</label>
+    <input id="titleInput" type="text">
+
+    <label>問題描述 *</label>
+    <textarea id="descInput"></textarea>
+  </div>
+
+  <div class="card location-group">
+    <h3>地點資訊</h3>
+
+    <div class="gps-group">
+      <button id="gpsBtn" type="button">自動偵測目前位置</button>
+
+      <div class="row">
+        <input id="latInput" placeholder="緯度">
+        <input id="lngInput" placeholder="經度">
+      </div>
+    </div>
+    <small>※ 可使用自動定位
+  </div>
+
+  <div class="card">
+    <h3>嚴重程度與照片</h3>
+
+    <div class="severity-buttons">
+      <button type="button" class="severity-btn active" data-value="normal">
+        一般
+      </button>
+      <button type="button" class="severity-btn urgent" data-value="urgent">
+        緊急
+      </button>
+    </div>
+
+    <input type="hidden" id="severity" value="normal">
+
+    <label>上傳照片 *</label>
+    <input type="file" id="imageInput" accept="image/*">
+
+    <button id="submitBtn" type="button">送出通報</button>
+  </div>
+</form>
+
+<script type="module" src="auth-guard.js"></script>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
+import { getAuth } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js";
+import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDQziEhhw0dPu_io9sfWT-a3sADgIKFSd4",
+  authDomain: "system-b4d2d.firebaseapp.com",
+  projectId: "system-b4d2d"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+const CLOUD_NAME = "dntuqyn7t";
+const UPLOAD_PRESET = "report_images";
+
+backBtn.onclick = () => history.back();
+
+gpsBtn.onclick = () => {
+  navigator.geolocation.getCurrentPosition(pos => {
+    latInput.value = pos.coords.latitude.toFixed(6);
+    lngInput.value = pos.coords.longitude.toFixed(6);
+  });
+};
+
+document.querySelectorAll(".severity-btn").forEach(btn => {
+  btn.onclick = () => {
+    document.querySelectorAll(".severity-btn")
+      .forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    severity.value = btn.dataset.value;
+  };
+});
+
+submitBtn.onclick = async () => {
+  if (!auth.currentUser) return alert("尚未登入");
+  if (!titleInput.value || !descInput.value || !imageInput.files[0])
+    return alert("請填寫完整資料");
+  if (!latInput.value || !lngInput.value)
+    return alert("請取得 GPS 位置");
+
+  submitBtn.disabled = true;
+  submitBtn.innerText = "上傳中...";
+
+  const fd = new FormData();
+  fd.append("file", imageInput.files[0]);
+  fd.append("upload_preset", UPLOAD_PRESET);
+
+  const res = await fetch(
+    `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`,
+    { method: "POST", body: fd }
+  );
+  const img = await res.json();
+
+  await addDoc(collection(db, "reports"), {
+    title: titleInput.value,
+    description: descInput.value,
+    severity: severity.value,
+    latitude: parseFloat(latInput.value),
+    longitude: parseFloat(lngInput.value),
+    imageUrl: img.secure_url,
+    status: "submitted",
+    createdBy: auth.currentUser.uid,
+    createdAt: serverTimestamp()
+  });
+
+  alert("通報成功");
+  location.href = "user.html";
+};
+</script>
+
+</body>
+</html>

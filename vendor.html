@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>廠商後台｜指派案件</title>
+
+<style>
+:root{
+  --vendor-color:#A8815F;
+  --secondary-color:#6c757d;
+  --background-color:#f8f9fa;
+  --card-background:#ffffff;
+  --text-color:#343a40;
+  --border-color:#dee2e6;
+  --font-sans:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;
+}
+*{box-sizing:border-box}
+
+body{
+  font-family:var(--font-sans);
+  max-width:1100px;
+  margin:30px auto;
+  padding:0 20px;
+  background:var(--background-color);
+  color:var(--text-color);
+}
+
+/* ===== Header ===== */
+header{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  margin-bottom:30px;
+  padding-bottom:10px;
+  border-bottom:3px solid var(--vendor-color);
+}
+h2{margin:0;color:var(--vendor-color)}
+#logoutBtn{
+  background:var(--secondary-color);
+  color:#fff;
+  border:none;
+  padding:10px 18px;
+  border-radius:5px;
+  cursor:pointer;
+  font-weight:bold;
+}
+
+/* ===== Card ===== */
+.card{
+  background:var(--card-background);
+  border:1px solid var(--border-color);
+  border-radius:8px;
+  padding:25px;
+  margin-top:25px;
+  box-shadow:0 4px 12px rgba(0,0,0,.05);
+}
+.card h3{
+  margin:0 0 15px;
+  color:var(--vendor-color);
+  border-left:4px solid var(--vendor-color);
+  padding-left:10px;
+}
+
+/* ===== Map ===== */
+#map{
+  width:100%;
+  height:300px;
+  border-radius:6px;
+  border:1px solid var(--border-color);
+}
+.map-info{
+  text-align:center;
+  margin-top:10px;
+  font-size:.9rem;
+  color:var(--secondary-color);
+}
+
+/* ===== Legend ===== */
+.map-legend{
+  display:flex;
+  justify-content:center;
+  gap:24px;
+  margin-top:12px;
+  font-size:.9rem;
+}
+.legend-item{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  cursor:pointer;
+  padding:6px 10px;
+  border-radius:4px;
+}
+.legend-item.active{
+  background:var(--vendor-color);
+  color:#fff;
+}
+.legend-item img{width:20px}
+
+/* ===== Table ===== */
+.table-header{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  margin-bottom:10px;
+}
+select{
+  padding:6px 10px;
+  border-radius:4px;
+  border:1px solid var(--border-color);
+}
+
+table{
+  width:100%;
+  border-collapse:separate;
+  border-spacing:0;
+  border:1px solid var(--vendor-color);
+  border-radius:6px;
+  overflow:hidden;
+}
+th,td{
+  padding:12px 15px;
+  border-bottom:1px solid var(--vendor-color);
+}
+th{
+  background:#f1eddf;
+  color:var(--vendor-color);
+}
+tr:last-child td{border-bottom:none}
+
+/* ⭐ 清單內容置中 */
+#reportTable td{
+  text-align:center;
+  vertical-align:middle;
+}
+
+td a{
+  display:inline-block;
+  padding:6px 12px;
+  background:#e9ecef;
+  color:var(--text-color);
+  border-radius:4px;
+  text-decoration:none;
+  font-weight:bold;
+}
+</style>
+</head>
+
+<body>
+
+<header>
+  <h2>廠商案件管理</h2>
+  <button id="logoutBtn">登出</button>
+</header>
+
+<div class="card">
+  <p><strong>👤 登入者：</strong><span id="userEmail">載入中...</span></p>
+  <p><strong>🌟 身分：</strong>廠商</p>
+</div>
+
+<!-- ===== 地圖 ===== -->
+<div class="card">
+  <h3>我的施工案件地圖</h3>
+
+  <div id="map"></div>
+
+  <div class="map-info">
+    <span id="reportCount">載入中...</span>
+  </div>
+
+  <div class="map-legend">
+    <div class="legend-item active" data-filter="all">
+      全部
+    </div>
+    <div class="legend-item " data-filter="processing">
+      <img src="http://maps.google.com/mapfiles/ms/icons/orange-dot.png">
+      處理中
+    </div>
+    <div class="legend-item" data-filter="completed">
+      <img src="http://maps.google.com/mapfiles/ms/icons/green-dot.png">
+      已完成
+    </div>
+    
+  </div>
+</div>
+
+<!-- ===== 清單 ===== -->
+<div class="card">
+  <div class="table-header">
+    <h3>指派給我的案件</h3>
+    <select id="statusSelect">
+      <option value="all">全部狀態</option>
+      <option value="processing">處理中</option>
+      <option value="completed">已完成</option>
+    </select>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>標題</th>
+        <th>狀態</th>
+        <th>指派時間</th>
+        <th>操作</th>
+      </tr>
+    </thead>
+    <tbody id="reportTable"></tbody>
+  </table>
+</div>
+
+<script type="module" src="auth-guard.js"></script>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
+import { getAuth,onAuthStateChanged,signOut } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js";
+import { getFirestore,collection,query,where,getDocs } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
+
+/* ===== Firebase ===== */
+const app = initializeApp({
+  apiKey:"AIzaSyDQziEhhw0dPu_io9sfWT-a3sADgIKFSd4",
+  authDomain:"system-b4d2d.firebaseapp.com",
+  projectId:"system-b4d2d"
+});
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+/* ===== State ===== */
+const tableBody = document.getElementById("reportTable");
+const statusSelect = document.getElementById("statusSelect");
+let map, markers = [], allReports = [];
+let mapFilter = "all";
+let tableFilter = "all";
+function syncDropdownByMapFilter(){
+  const optAll = statusSelect.querySelector('[value="all"]');
+  const optProc = statusSelect.querySelector('[value="processing"]');
+  const optComp = statusSelect.querySelector('[value="completed"]');
+if(mapFilter === "completed"){
+    optAll.textContent = "已完成";
+    optProc.hidden = true;
+    optComp.hidden = false;
+    statusSelect.value = "all";
+    tableFilter = "all";
+  }
+  else if(mapFilter === "processing"){
+    optAll.textContent = "處理中";
+    optProc.hidden = false;
+    optComp.hidden = true;
+    statusSelect.value = "all";
+    tableFilter = "all";
+  }
+  
+  else {
+    optAll.textContent = "全部";
+    optProc.hidden = false;
+    optComp.hidden = false;
+  }
+}
+
+/* ===== Auth ===== */
+onAuthStateChanged(auth, async user => {
+  if (!user) return;
+  userEmail.innerText = user.email;
+  await loadReports(user.uid);
+});
+
+logoutBtn.onclick = async () => {
+  await signOut(auth);
+  location.href = "auth.html";
+};
+
+/* ===== Load Data ===== */
+async function loadReports(uid){
+  const q = query(
+    collection(db,"reports"),
+    where("assignedVendorId","==",uid)
+  );
+  const snap = await getDocs(q);
+  allReports = snap.docs.map(d => ({ id:d.id, ...d.data() }));
+  initMap(allReports);
+  syncDropdownByMapFilter();
+  applyFilters();
+}
+
+/* ===== Map ===== */
+function initMap(reports){
+  const valid = reports.filter(r => r.latitude && r.longitude);
+
+  const center = valid.length
+    ? { lat:+valid[0].latitude, lng:+valid[0].longitude }
+    : { lat:25.0478, lng:121.5170 };
+
+  map = new google.maps.Map(document.getElementById("map"), {
+    center,
+    zoom:13
+  });
+
+  markers = valid.map(r => {
+    const group = r.status === "completed" ? "completed" : "processing";
+
+    const marker = new google.maps.Marker({
+      map,
+      position:{ lat:+r.latitude, lng:+r.longitude },
+      icon: group === "completed"
+        ? "http://maps.google.com/mapfiles/ms/icons/green-dot.png"
+        : "http://maps.google.com/mapfiles/ms/icons/orange-dot.png",
+      title: r.title
+    });
+
+    /* ⭐ 點擊圖標 → 前往案件詳情 ⭐ */
+    marker.addListener("click", () => {
+      location.href = `report-detail.html?id=${r.id}`;
+    });
+
+    marker.__group = group;
+    return marker;
+  });
+}
+
+/* ===== 排序：處理中 → 已完成 ===== */
+function sortReportsByStatus(reports){
+  const order = { processing:0, completed:1 };
+  return [...reports].sort((a,b)=>{
+    const ag = a.status==="completed"?"completed":"processing";
+    const bg = b.status==="completed"?"completed":"processing";
+    return order[ag]-order[bg];
+  });
+}
+
+/* ===== 篩選 ===== */
+function applyFilters(){
+
+  markers.forEach(m=>{
+    m.setVisible(mapFilter==="all" || m.__group===mapFilter);
+  });
+
+  tableBody.innerHTML = "";
+  const filtered = sortReportsByStatus(
+    allReports.filter(r=>{
+      const g = r.status==="completed"?"completed":"processing";
+      const mapOK = mapFilter==="all" || g===mapFilter;
+      const tableOK = tableFilter==="all" || g===tableFilter;
+      return mapOK && tableOK;
+    })
+  );
+
+  if(!filtered.length){
+    tableBody.innerHTML =
+      `<tr><td colspan="4" style="color:#6c757d;">無符合案件</td></tr>`;
+  }
+
+  filtered.forEach(r=>{
+    tableBody.innerHTML += `
+      <tr>
+        <td>${r.title}</td>
+        <td>${r.status==="completed"?"已完成":"處理中"}</td>
+        <td>${r.assignedAt ? r.assignedAt.toDate().toLocaleString("zh-TW") : ""}</td>
+        <td><a href="report-detail.html?id=${r.id}">查看</a></td>
+      </tr>`;
+  });
+
+  reportCount.innerText =
+    `顯示 ${filtered.length} / ${allReports.length} 件`;
+}
+
+/* ===== 圖例 ===== */
+document.querySelectorAll(".legend-item").forEach(el=>{
+  el.onclick = () => {
+    document.querySelectorAll(".legend-item")
+      .forEach(i=>i.classList.remove("active"));
+    el.classList.add("active");
+    mapFilter = el.dataset.filter;
+    applyFilters();
+    syncDropdownByMapFilter();
+  };
+});
+
+/* ===== 下拉 ===== */
+statusSelect.onchange = () => {
+  tableFilter = statusSelect.value;
+  applyFilters();
+};
+</script>
+
+<script
+  src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDWncU5_3lao2CkDNUWf9llEMDywLUBmTs"
+  async defer>
+</script>
+
+</body>
+</html>
