@@ -118,11 +118,9 @@ th{background:#f5f8fc;color:var(--primary)}
       <img src="http://maps.google.com/mapfiles/ms/icons/red-dot.png"> 尚未處理
     </span>
     <span class="legend-item" data-status="assigned">
-      <img src="http://maps.google.com/mapfiles/ms/icons/orange-dot.png"> 已指派
-    </span>
-    <span class="legend-item" data-status="processing">
-      <img src="http://maps.google.com/mapfiles/ms/icons/yellow-dot.png"> 處理中
-    </span>
+  <img src="http://maps.google.com/mapfiles/ms/icons/yellow-dot.png"> 已指派
+</span>
+
     <span class="legend-item" data-status="completed">
       <img src="http://maps.google.com/mapfiles/ms/icons/green-dot.png"> 已完成
     </span>
@@ -138,7 +136,6 @@ th{background:#f5f8fc;color:var(--primary)}
     <option value="all">全部</option>
     <option value="submitted">尚未處理</option>
     <option value="assigned">已指派</option>
-    <option value="processing">處理中</option>
     <option value="completed">已完成</option>
   </select>
 
@@ -195,6 +192,10 @@ onAuthStateChanged(auth,async user=>{
 });
 
 logoutBtn.onclick=async()=>{await signOut(auth);location.href="auth.html"};
+function normalizeStatus(status){
+  return status === "processing" ? "assigned" : status;
+}
+
 function updateStatusSummary(reports){
   const count = {
     submitted: 0,
@@ -234,12 +235,12 @@ function initMap(){
   });
 
   markers = valid.map(r=>{
-    const icon =
-      r.status==="submitted"?"red"
-      : r.status==="assigned"?"orange"
-      : r.status==="processing"?"yellow"
-      : "green";
+    const s = normalizeStatus(r.status);
 
+const icon =
+  s === "submitted" ? "red"
+  : s === "assigned" ? "yellow"
+  : "green";
     const m = new google.maps.Marker({
       map,
       position:{ lat:+r.latitude, lng:+r.longitude },
@@ -288,9 +289,10 @@ function applyFilter(status){
   let list =
     status === "all"
       ? allReports
-      : allReports.filter(r => r.status === status);
+      : allReports.filter(r =>
+          normalizeStatus(r.status) === status
+        );
 
-  /* ⭐ 只針對「尚未處理」做緊急 → 一般排序 */
   if (status === "submitted") {
     list = sortSubmittedBySeverity(list);
   }
@@ -298,10 +300,19 @@ function applyFilter(status){
   renderTable(list);
 
   markers.forEach(m=>{
-    m.setVisible(status === "all" || m.__status === status);
+    m.setVisible(
+      status === "all" ||
+      normalizeStatus(m.__status) === status
+    );
   });
 }
 
+function statusText(s){
+  s = normalizeStatus(s);
+  return s==="submitted" ? "尚未處理"
+       : s==="assigned"  ? "已指派"
+       : "已完成";
+}
 
 /* ⭐ 同步 UI（唯一入口） */
 function syncUI(status){
@@ -324,13 +335,7 @@ legends.forEach(l=>{
   l.onclick=()=>syncUI(l.dataset.status);
 });
 
-/* 狀態文字 */
-function statusText(s){
-  return s==="submitted"?"尚未處理"
-       : s==="assigned"?"已指派"
-       : s==="processing"?"處理中"
-       : "已完成";
-}
+
 </script>
 
 <script
